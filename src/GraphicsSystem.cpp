@@ -1,6 +1,10 @@
 #include "GraphicsSystem.h"
 #include "Game.h"
 #include "extern.h"
+#include <iostream>
+#include <algorithm>
+#include <fstream>
+
 
 //destructor
 GraphicsSystem::~GraphicsSystem() {
@@ -31,8 +35,11 @@ void GraphicsSystem::update(float dt) {
 
 	//loop over mesh components by reference (&)
 	for (auto &curr_comp : mesh_components) {
-		// TODO:
-		// - change shader if material of component is different
+		//get shader for this material
+		Material& comp_mat = getMaterial(curr_comp.material);
+		current_program_ = comp_mat.shader_id;
+
+		//activate shader
 		glUseProgram(current_program_);
 
 		//render component
@@ -45,7 +52,8 @@ void GraphicsSystem::renderMeshComponent_(Mesh& comp) {
 
 	//TODO:
 	// - modify this function so it renders the geometry and the material associated with the component
-
+	Geometry& comp_geom = getGeometry(comp.geometry);
+	Material& comp_mat = getMaterial(comp.material);
 
 	lm::vec3 cam_position(0.0f, 0.0f, 3.0f);
 	lm::vec3 cam_target(0.0f, 0.0f, 0.0f);
@@ -78,7 +86,7 @@ void GraphicsSystem::renderMeshComponent_(Mesh& comp) {
 	GLint u_cam_pos = glGetUniformLocation(current_program_, "u_cam_pos");
 	GLint u_texture_diffuse = glGetUniformLocation(current_program_, "u_texture_diffuse");
 	GLint u_glossiness = glGetUniformLocation(current_program_, "u_glossiness");
-
+	GLint u_diffuse = glGetUniformLocation(current_program_, "u_diffuse");
 	//if the uniforms exist, send the data to the shader
 	if (u_mvp != -1) glUniformMatrix4fv(u_mvp, 1, GL_FALSE, mvp_matrix.m);
 	if (u_model != -1) glUniformMatrix4fv(u_model, 1, GL_FALSE, model_matrix.m);
@@ -87,16 +95,16 @@ void GraphicsSystem::renderMeshComponent_(Mesh& comp) {
 	if (u_cam_pos != -1) glUniform3fv(u_cam_pos, 1, cam_position.value_); // ...3fv - is array of 3 floats
 	if (u_texture_diffuse != -1) glUniform1i(u_texture_diffuse, 0); // ...1i - is integer
 	if (u_glossiness != -1) glUniform1f(u_glossiness, 80.0f); //...1f - for float
-
+	if (u_diffuse != -1) glUniform3fv(u_diffuse, 1, comp_mat.diffuse_color.value_);
 															  //activate texture unit 0, and bind our texture there
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, temp_texture);
+	glBindTexture(GL_TEXTURE_2D, comp_mat.diffuse_texture);
 
 	//tell OpenGL we want to the the vao_ container with our buffers
-	glBindVertexArray(comp.vao);
+	glBindVertexArray(comp_geom.vao);
 
 	//draw our geometry
-	glDrawElements(GL_TRIANGLES, comp.num_tris * 3, GL_UNSIGNED_INT, 0);
+	glDrawElements(GL_TRIANGLES, comp_geom.num_tris * 3, GL_UNSIGNED_INT, 0);
 
 	//tell OpenGL we don't want to use our container anymore
 	glBindVertexArray(0);
@@ -128,13 +136,13 @@ GLuint GraphicsSystem::loadTexture(std::string path) {
 }
 
 //creates a standard plane geometry
-void GraphicsSystem::createPlaneGeometry(GLuint& vao, GLuint& num_tris) {
+int GraphicsSystem::createPlaneGeometry() {
 
 	//TODO: 
 	// - rewrite this function so that it adds a geometry to teh std::vector
+	Geometry new_geom;
 
-
-
+	//------------------------------------------------------------------------------HOMEWORK
 	//four vertices in a square
 	const GLfloat position_buffer_data[] = {
 		-0.5f, -0.5f, 0.0f,
@@ -159,13 +167,13 @@ void GraphicsSystem::createPlaneGeometry(GLuint& vao, GLuint& num_tris) {
 	};
 	//index buffer
 	const GLuint index_buffer_data[] = { 0, 1, 2, 0, 2, 3 };
-
+	//-----------------------------------------------------------------------------------------
 	//set number of triangles (of passed variable)
-	num_tris = 2;
+	new_geom.num_tris = 2;
 
 	//create Vertex Array Object
-	glGenVertexArrays(1, &vao);
-	glBindVertexArray(vao);
+	glGenVertexArrays(1, &new_geom.vao);
+	glBindVertexArray(new_geom.vao);
 
 	//Now create Vertex Buffer Objects for each buffer: positions, uvs, normals, and indices
 	GLuint vbo;
@@ -196,6 +204,102 @@ void GraphicsSystem::createPlaneGeometry(GLuint& vao, GLuint& num_tris) {
 	//unbind
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
+
+	geometries_.push_back(new_geom);
+
+	//we'll return the index of the new geometry in the geometries aarray
+	return (int)geometries_.size() - 1;
+}
+
+int GraphicsSystem::createBaseMaterial() {
+	Material new_mat;
+	materials_.push_back(new_mat);
+	return (int)materials_.size() - 1;
+}
+
+int GraphicsSystem::createGeometryFromOBJ() {
+	const string path = "data/assets/cube.obj";
+	std::vector< unsigned int > vertexIndices, uvIndices, normalIndices;
+	std::vector< lm::vec3 >  temp_vertices;
+	std::vector< lm::vec2 >  temp_uvs;
+	std::vector< lm::vec3 >  temp_normals;
+	std::string line;
+	ifstream myfile(path);
+
+	if (myfile.is_open()) {
+		while (getline(myfile, line))
+		{
+			
+			std::string text;
+			myfile >> text;
+			
+			cout << text << endl;
+			if (text == "v") {
+				lm::vec3 vertex;
+				myfile >> vertex.x;
+				myfile >> vertex.y;
+				myfile >> vertex.z;
+
+				temp_vertices.push_back(vertex);
+				std::cout << vertex.x << " "<< vertex.y << " " << vertex.z << std::endl;
+			}
+			else if (text == "vt") {
+				lm::vec2 uv;
+				myfile >> uv.x;
+				myfile >> uv.y;
+
+				temp_uvs.push_back(uv);
+				std::cout << uv.x << " " << uv.y << " " << std::endl;
+			}
+			else if (text == "vn") {
+				lm::vec3 normal;
+				myfile >> normal.x;
+				myfile >> normal.y;
+				myfile >> normal.z;
+
+				temp_normals.push_back(normal);
+				std::cout << normal.x << " " << normal.y << " " << normal.z << std::endl;
+			}
+			else if (text == "f") {
+				std::string fx,fy,fz;
+				unsigned int vertexIndex[3], uvIndex[3], normalIndex[3];
+				myfile >> fx >> fy >> fz;
+				fx.erase(std::remove(fx.begin(), fx.end(), '/'), fx.end());
+				fy.erase(std::remove(fy.begin(), fy.end(), '/'), fy.end());
+				fz.erase(std::remove(fz.begin(), fz.end(), '/'), fz.end());
+				
+				int  fa = atoi(fx.c_str());
+				int  fb = atoi(fy.c_str());
+				int  fc = atoi(fz.c_str());
+				
+				vertexIndex[0] =  floor((fa / 100) % 10);
+				uvIndex[0] = floor((fa /10) % 10);
+				normalIndex[0] = floor(fa % 10);
+				vertexIndex[1] = floor((fb / 100) % 10);
+				uvIndex[1] = floor(fb / 10 % 10);
+				normalIndex[1] = floor(fb % 10);
+				vertexIndex[2] = floor((fc / 100) % 10);
+				uvIndex[2] = floor(fc / 10 % 10);
+				normalIndex[2] = floor(fc % 10);
+
+				vertexIndices.push_back(vertexIndex[0]);
+				vertexIndices.push_back(vertexIndex[1]);
+				vertexIndices.push_back(vertexIndex[2]);
+				uvIndices.push_back(uvIndex[0]);
+				uvIndices.push_back(uvIndex[1]);
+				uvIndices.push_back(uvIndex[2]);
+				normalIndices.push_back(normalIndex[0]);
+				normalIndices.push_back(normalIndex[1]);
+				normalIndices.push_back(normalIndex[2]);
+				std::cout << vertexIndex[0] << uvIndex[0] <<normalIndex[0] << std::endl;
+				std::cout << vertexIndex[1] << uvIndex[1] << normalIndex[1] << std::endl;
+				std::cout << vertexIndex[2] << uvIndex[2] << normalIndex[2] << std::endl;
+			}
+		}
+		myfile.close();
+	}
+	else cout << "Impossible to open the file !\n";
+	return 0;
 
 
 }

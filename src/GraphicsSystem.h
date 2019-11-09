@@ -7,12 +7,25 @@
 #include <unordered_map>
 
 struct Geometry {
-	//TODO:
-	// - add properties
-	// - add constructor with default properties
+	GLuint vao;
+	GLuint num_tris;
 };
 
 struct Material {
+	std::string name;
+	GLuint shader_id;
+	lm::vec3 diffuse_color;
+	lm::vec3 specular_color;
+	float shininess;
+	GLint diffuse_texture;
+
+	Material() {
+		shader_id = 0;
+		diffuse_color = lm::vec3(1.0f, 1.0f, 1.0f);
+		specular_color = lm::vec3(1.0f, 1.0f, 1.0f);
+		shininess = 30.0f;
+		diffuse_texture = -1;
+	}
 	//TODO:
 	// - add properties here
 	// - add constructor with default properties
@@ -39,18 +52,31 @@ public:
 	GLuint loadTexture(std::string path);
 
 	//TODO - change this (see description in cpp file)
-	void createPlaneGeometry(GLuint& vao, GLuint& num_tris);
-
+	int createPlaneGeometry();
+	int GraphicsSystem::createGeometryFromOBJ();
 	//TODO: - implement this
-	int createMaterial();
+	int createBaseMaterial();
 
 	//TODO 
 	// - delete this!
 	GLuint temp_texture;
 
+	Material& getMaterial(int index) {
+		if (index > materials_.size())
+			std::cout << "wrong material index";
+		return materials_[index];
+	}	
+	Geometry& getGeometry(int index) {
+		if (index > geometries_.size())
+			std::cout << "wrong geometries index";
+		return geometries_[index];
+	}
+
 private:
 	//dictionary of shaders
 	std::unordered_map<std::string, Shader*> shaders_;
+	std::vector<Geometry> geometries_;
+	std::vector<Material> materials_;
 
 	//TODO:
 	// - create *private* storage vectors for Geometries and Materials
