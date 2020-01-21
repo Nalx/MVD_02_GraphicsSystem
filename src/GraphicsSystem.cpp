@@ -139,7 +139,7 @@ GLuint GraphicsSystem::loadTexture(std::string path) {
 int GraphicsSystem::createPlaneGeometry() {
 
 	//TODO: 
-	// - rewrite this function so that it adds a geometry to teh std::vector
+	// - rewrite this function so that it adds a geometry to the std::vector
 	Geometry new_geom;
 
 	//------------------------------------------------------------------------------HOMEWORK
@@ -219,37 +219,50 @@ int GraphicsSystem::createBaseMaterial() {
 
 int GraphicsSystem::createGeometryFromOBJ() {
 	const string path = "data/assets/cube.obj";
-	std::vector< unsigned int > vertexIndices, uvIndices, normalIndices;
-	std::vector< lm::vec3 >  temp_vertices;
-	std::vector< lm::vec2 >  temp_uvs;
-	std::vector< lm::vec3 >  temp_normals;
+	std::vector< GLfloat > position_buffer_data, texture_buffer_data, normal_buffer_data;
+	std::vector<unsigned int> indices;
+	GLuint vertexIndex_data;
+	GLuint uvIndex_data;
+	GLuint normalIndex_data;
+
+	std::vector< lm::vec3>  unique_vertex;
+	std::vector< lm::vec2 >  unique_uvs;
+	std::vector< lm::vec3 >  unique_normals;
+	std::vector<float>   out_vertices;
+	std::vector<float>   out_uvs;
+	std::vector<float>    out_normals;
 	std::string line;
+	int map_index = 0;
+	std::unordered_map<std::string, int> umap;
+	Geometry new_geom;
 	ifstream myfile(path);
 
 	if (myfile.is_open()) {
 		while (getline(myfile, line))
 		{
-			
+
 			std::string text;
 			myfile >> text;
-			
-			cout << text << endl;
+
+			//std::cerr << text << std::endl;
 			if (text == "v") {
 				lm::vec3 vertex;
 				myfile >> vertex.x;
 				myfile >> vertex.y;
 				myfile >> vertex.z;
 
-				temp_vertices.push_back(vertex);
-				std::cout << vertex.x << " "<< vertex.y << " " << vertex.z << std::endl;
+
+
+				unique_vertex.push_back(vertex);
+				//std::cout << vertex.x << " " << vertex.y << " " << vertex.z << std::endl;
 			}
 			else if (text == "vt") {
 				lm::vec2 uv;
 				myfile >> uv.x;
 				myfile >> uv.y;
 
-				temp_uvs.push_back(uv);
-				std::cout << uv.x << " " << uv.y << " " << std::endl;
+				unique_uvs.push_back(uv);
+				//	std::cout << uv.x << " " << uv.y << " " << std::endl;
 			}
 			else if (text == "vn") {
 				lm::vec3 normal;
@@ -257,23 +270,51 @@ int GraphicsSystem::createGeometryFromOBJ() {
 				myfile >> normal.y;
 				myfile >> normal.z;
 
-				temp_normals.push_back(normal);
-				std::cout << normal.x << " " << normal.y << " " << normal.z << std::endl;
+				unique_normals.push_back(normal);
+				//	std::cout << normal.x << " " << normal.y << " " << normal.z << std::endl;
 			}
 			else if (text == "f") {
-				std::string fx,fy,fz;
+				std::string fx, fy, fz;
 				unsigned int vertexIndex[3], uvIndex[3], normalIndex[3];
 				myfile >> fx >> fy >> fz;
+				//Si el fx no existeix dins el umap creo un registre del valor amb un index a una posició més
+				//Si el fx existeix genero una posició més a l'array de index finals de valor int del umap i passo d'afegirlo al umap
+				if (umap.count(fx) == 0) {
+					umap[fx] = map_index;
+					indices.push_back(map_index);
+					map_index++;
+				}
+				else {
+					indices.push_back(umap.at(fx));
+				}
+				if (umap.count(fy) == 0) {
+					umap[fy] = map_index;
+					indices.push_back(map_index);
+					map_index++;
+				}
+				else {
+					indices.push_back(umap.at(fy));
+				}
+				if (umap.count(fz) == 0) {
+					umap[fz] = map_index;
+					indices.push_back(map_index);
+					map_index++;
+				}
+				else {
+					indices.push_back(umap.at(fz));
+				}
+
 				fx.erase(std::remove(fx.begin(), fx.end(), '/'), fx.end());
 				fy.erase(std::remove(fy.begin(), fy.end(), '/'), fy.end());
 				fz.erase(std::remove(fz.begin(), fz.end(), '/'), fz.end());
-				
+
 				int  fa = atoi(fx.c_str());
 				int  fb = atoi(fy.c_str());
 				int  fc = atoi(fz.c_str());
-				
-				vertexIndex[0] =  floor((fa / 100) % 10);
-				uvIndex[0] = floor((fa /10) % 10);
+
+				//Dividing the string by vertex-uvs-normal
+				vertexIndex[0] = floor((fa / 100) % 10);
+				uvIndex[0] = floor((fa / 10) % 10);
 				normalIndex[0] = floor(fa % 10);
 				vertexIndex[1] = floor((fb / 100) % 10);
 				uvIndex[1] = floor(fb / 10 % 10);
@@ -281,25 +322,95 @@ int GraphicsSystem::createGeometryFromOBJ() {
 				vertexIndex[2] = floor((fc / 100) % 10);
 				uvIndex[2] = floor(fc / 10 % 10);
 				normalIndex[2] = floor(fc % 10);
-
-				vertexIndices.push_back(vertexIndex[0]);
-				vertexIndices.push_back(vertexIndex[1]);
-				vertexIndices.push_back(vertexIndex[2]);
-				uvIndices.push_back(uvIndex[0]);
-				uvIndices.push_back(uvIndex[1]);
-				uvIndices.push_back(uvIndex[2]);
-				normalIndices.push_back(normalIndex[0]);
-				normalIndices.push_back(normalIndex[1]);
-				normalIndices.push_back(normalIndex[2]);
-				std::cout << vertexIndex[0] << uvIndex[0] <<normalIndex[0] << std::endl;
+				//We have now stored all face information in 3 separate buffers
+				position_buffer_data.push_back(vertexIndex[0]);
+				position_buffer_data.push_back(vertexIndex[1]);
+				position_buffer_data.push_back(vertexIndex[2]);
+				texture_buffer_data.push_back(uvIndex[0]);
+				texture_buffer_data.push_back(uvIndex[1]);
+				texture_buffer_data.push_back(uvIndex[2]);
+				normal_buffer_data.push_back(normalIndex[0]);
+				normal_buffer_data.push_back(normalIndex[1]);
+				normal_buffer_data.push_back(normalIndex[2]);
+				/*std::cout << vertexIndex[0] << uvIndex[0] << normalIndex[0] << std::endl;
 				std::cout << vertexIndex[1] << uvIndex[1] << normalIndex[1] << std::endl;
-				std::cout << vertexIndex[2] << uvIndex[2] << normalIndex[2] << std::endl;
+				std::cout << vertexIndex[2] << uvIndex[2] << normalIndex[2] << std::endl;*/
 			}
 		}
 		myfile.close();
 	}
-	else cout << "Impossible to open the file !\n";
-	return 0;
+	else std::cerr << "Impossible to open the file !\n";
+	return false;
 
+	//index buffer
+	for (unsigned int i = 0; i < position_buffer_data.size(); i++) {
 
+		vertexIndex_data = position_buffer_data[i];
+		uvIndex_data = texture_buffer_data[i];
+		normalIndex_data = normal_buffer_data[i];
+
+		// Get the attributes thanks to each index
+		lm::vec3 vertex = unique_vertex[vertexIndex_data - 1];
+		lm::vec2 uv = unique_uvs[uvIndex_data - 1];
+		lm::vec3 normal = unique_normals[normalIndex_data - 1];
+		 
+		out_vertices.push_back(vertex.x);
+		out_vertices.push_back(vertex.y);
+		out_vertices.push_back(vertex.z);
+		out_uvs.push_back(uv.x);
+		out_uvs.push_back(uv.y);
+		out_normals.push_back(normal.x);
+		out_normals.push_back(normal.y);
+		out_normals.push_back(normal.z);
+
+	}
+	std::cout << out_vertices.size() << std::endl;
+	std::cout << out_uvs.size() << std::endl;
+	std::cout << out_normals.size() << std::endl;
+	//-----------------------------------------------------------------------------------------
+	//TODO: 
+	// - rewrite this function so that it adds a geometry to the std::vector
+	
+	
+	//set number of triangles (of passed variable)
+	new_geom.num_tris = (out_vertices.size() / 3);
+
+	//create Vertex Array Object
+	glGenVertexArrays(1, &new_geom.vao);
+	glBindVertexArray(new_geom.vao);
+
+	//Now create Vertex Buffer Objects for each buffer: positions, uvs, normals, and indices
+	GLuint vbo;
+	//positions
+	glGenBuffers(1, &vbo); //create buffer
+	glBindBuffer(GL_ARRAY_BUFFER, vbo); //set OpenGL state to say we want to work with this vertex buffer object
+	glBufferData(GL_ARRAY_BUFFER, sizeof(out_vertices) * sizeof(float), &out_vertices, GL_STATIC_DRAW); //copy data
+	glEnableVertexAttribArray(0); //enable attribute labelled as '0' in vertex shader: "layout(location = 0) in vec3 a_vertex;"
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0); //each attribute '0' is composed of 3 floats (in this case, xyz)
+
+	//texture coords
+	glGenBuffers(1, &vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(out_uvs) * sizeof(float), &out_uvs[0], GL_STATIC_DRAW);
+	glEnableVertexAttribArray(1); // (1 = a_uv)
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, 0); //only two coordinates for textures: uv
+	//normals								   
+	glGenBuffers(1, &vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(out_normals) * sizeof(float), &out_normals[0], GL_STATIC_DRAW);
+	glEnableVertexAttribArray(2); // (2 = a_normal)
+	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, 0);
+	//indices
+	GLuint ibo;
+	glGenBuffers(1, &ibo);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(position_buffer_data)*sizeof(unsigned int), &(indices[0]), GL_STATIC_DRAW);
+	//unbind
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindVertexArray(0);
+
+	geometries_.push_back(new_geom);
+
+	//we'll return the index of the new geometry in the geometries aarray
+	return (int)geometries_.size() - 1;
 }
